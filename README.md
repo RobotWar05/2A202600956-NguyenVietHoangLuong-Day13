@@ -70,5 +70,5 @@ Phải thấy `[PASS]` toàn bộ 5 mục.
 - **Không commit** API key thật lên git.
 
 ## Kết quả (Minh chứng)
-![Public Score](image/public.png)
-![Private Score](image/private.png)
+![Public Score](image/public.PNG)
+![Private Score](image/private.PNG)

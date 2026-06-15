@@ -13,5 +13,12 @@ traces/
 run_output.json
 score.json
 dashboard_summary.json
+public_run_output.json
+observathon_telemetry.jsonl
+wrapper_debug.log
+observathon-public-score-linux-x64/
+run_*.sh
 .env
 .DS_Store
+# scratch / debug scripts (không nộp)
+_scratch/

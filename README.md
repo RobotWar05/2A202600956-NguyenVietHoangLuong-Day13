@@ -1,81 +1,74 @@
-# Observathon — Bộ công cụ cho Học viên
+# Observathon - E-commerce Agent Optimization
 
-🇻🇳 Tiếng Việt | [🇬🇧 English](README_en.md)
+## Mục tiêu Lab
+Tối ưu hóa và bảo vệ một agent thương mại điện tử hộp đen thông qua config, prompt, wrapper và diagnostic findings. Hệ thống phải an toàn trước Prompt Injection, tối ưu chi phí, và báo cáo Telemetry chuẩn xác.
 
-Bạn được giao một agent thương mại điện tử **hộp đen, im lặng, đầy lỗi** (dạng binary) chạy
-trên một **LLM thật**. Nó không cho bạn biết gì cả. Nhiệm vụ của bạn: **gắn quan sát, chẩn
-đoán lỗi, và sửa chúng** — bằng cách sửa config, **viết lại system prompt của agent**, và thêm
-một lớp wrapper giảm thiểu lỗi.
+Điểm số: `100 × (0.32·correct + 0.16·quality + 0.13·error + 0.08·latency + 0.09·cost + 0.07·drift + 0.15·prompt) + bonus diag-F1`.
 
-## Cài đặt (bắt buộc có một LLM thật)
+## Môi trường & Thiết lập
+Chạy trên **WSL/Linux**. Export API key trước khi chạy:
 ```bash
-# 1. chọn một engine:
-export OPENAI_API_KEY=sk-...        # đám mây (model mặc định gpt-5.4-nano), HOẶC
-#    local miễn phí: chạy Ollama / llama.cpp (tương thích OpenAI), đặt provider:"local" + LOCAL_BASE_URL trong config.json
-
-# 2. kiểm tra khung bài nộp (chỉ stdlib, không cần key)
-python harness/selfcheck.py
-
-# 3. chạy binary mô phỏng giai đoạn PRACTICE (trong bin/practice/)
-./bin/practice/observathon-sim --config solution/config.json --wrapper solution/wrapper.py \
-    --out run_output.json --concurrency 8
-#   macOS lần đầu: xattr -dr com.apple.quarantine bin/practice/observathon-sim
-#   Windows:      bin\practice\observathon-sim.exe ...
+export OPENAI_API_KEY="<YOUR_DEEPSEEK_API_KEY>"
+export OPENAI_BASE_URL="https://api.deepseek.com"
+export LOCAL_BASE_URL="https://api.deepseek.com"
 ```
-Agent **không phát ra gì cả** và `run_output.json` **cố tình tối giản** — mỗi dòng chỉ có
-`answer` + `status` (không có latency, tokens, lời gọi tool, hay trace). Cách DUY NHẤT để thấy
-latency, chi phí, số lần gọi tool, vòng lặp, drift và PII là **gắn quan sát trong
-`solution/wrapper.py`**: `call_next()` trả về kết quả ĐẦY ĐỦ (gồm `meta` + `trace`) cho BẠN —
-hãy ghi lại bằng bộ `telemetry/` đã học ở Ngày 13. (Sim cũng ghi một khối `sealed` đã ký dành
-cho việc chấm điểm — đó không phải phần quan sát của bạn.)
 
-## Bạn tối ưu cái gì (đòn bẩy v6)
-Agent **điều khiển bằng prompt** và được giao kèm một system prompt **cố tình tệ** (nó bịa ra
-tổng tiền, tính sai, gọi tool dư thừa, lặp lại email/sđt của khách, và **làm theo chỉ dẫn ẩn
-trong ghi chú đơn hàng**). **Hãy viết lại `solution/prompt.txt`** — đây là cách sửa có đòn bẩy
-cao nhất và là một thành phần điểm **`prompt` chiếm 15%**. Xem
-**[`docs/PROMPT_OPTIMIZATION.md`](docs/PROMPT_OPTIMIZATION.md)**.
-
-| Bạn chỉnh | Tác dụng |
+## Cấu trúc Solution (`solution/`)
+| File | Vai trò |
 |---|---|
-| `solution/config.json` | các knob (provider/model, temperature, retry, cache, normalize, redact, `self_consistency`, `tool_budget`, `planner`, …) |
-| `solution/prompt.txt` | **system prompt** của agent — viết lại nó |
-| `solution/examples.json` | few-shot (tùy chọn) |
-| `solution/wrapper.py` | `mitigate()` — quan sát + retry/cache/route/redact/sanitize + định tuyến prompt theo từng request |
-| `solution/findings.json` | chẩn đoán (loại lỗi + bằng chứng + nguyên nhân gốc) |
+| `config.json` | Provider, model, temperature, retry, cache, redact |
+| `prompt.txt` | System prompt — extraction → tool calls → tính toán → output |
+| `wrapper.py` | Sanitize input, rebuild answer từ trace, telemetry, retry |
+| `findings.json` | Chẩn đoán 11 fault class + root cause + evidence |
+| `examples.json` | Few-shot: format đúng, refusal, coupon invalid |
 
-## Chọn binary cho HĐH của bạn (`bin/<phase>/`)
-| HĐH / kiến trúc | tệp |
-|---|---|
-| macOS (Apple Silicon, M1+) | `observathon-sim` / `observathon-score` (arm64) |
-| Windows | `observathon-sim.exe` / `observathon-score.exe` |
-| Linux | `observathon-sim` / `observathon-score` (x86_64) |
+## Hướng dẫn Chạy
 
-(macOS Intel không có sẵn binary — trên Intel hãy chạy từ mã nguồn với Python + `openai`.)
-macOS lần đầu (Gatekeeper): `xattr -dr com.apple.quarantine bin/<phase>/*`. Lịch phát hành:
-`practice` ngay từ đầu · public **sim** ở 1h, **score** ở 2h · private **sim** ở 3h, **score** ở 3.5h.
-
-## Tạo lưu lượng thực tế (tự chọn mức tải)
+**Practice Phase**
 ```bash
-# 200 người dùng x 12 lượt = 2400 request trải trên một khoảng thời gian mô phỏng
-./bin/practice/observathon-sim --users 200 --turns 12 --concurrency 12 \
-    --config solution/config.json --wrapper solution/wrapper.py --out run_output.json
+rm -f run_output.json score.json wrapper_debug.log observathon_telemetry.jsonl
+./bin/practice/observathon-sim \
+  --testset practice --config solution/config.json \
+  --wrapper solution/wrapper.py --out run_output.json
 ```
-- `--users N` số người dùng · `--turns K` request mỗi người (K lớn → quality-drift rõ hơn) · `--rps` tốc độ đến · `--concurrency` số request song song.
-- **Lưu lượng practice NGẪU NHIÊN mỗi lần** (in ra `random run seed = …`; truyền `--seed <giá trị>` để tái hiện). Việc chấm điểm luôn dùng bộ public/private **cố định**, nên mọi đội được xếp hạng trên cùng lưu lượng.
 
-## Cách chấm điểm
-`100 × (0.32·correct + 0.16·quality + 0.13·error + 0.08·latency + 0.09·cost + 0.07·drift +
-0.15·prompt) + tối đa 22 × diagnosis-F1`. Quality = LLM judge (`gpt-5.4-mini`, có offline dự
-phòng). `prompt` dựa trên **kết quả thực tế** (grounding/số học/tiết kiệm tool/PII/chống
-injection trừ đi phần prompt quá dài).
+**Public Phase**
+```bash
+rm -f run_output.json score.json wrapper_debug.log observathon_telemetry.jsonl
+./bin/public/observathon-sim \
+  --testset public --config solution/config.json \
+  --wrapper solution/wrapper.py --out run_output.json --concurrency 8
 
-## Bạn nộp gì (git push `solution/` + `run_output.json` + `score.json`)
-`config.json` · `prompt.txt` · `examples.json` (tùy chọn) · `wrapper.py` · `findings.json`.
+./observathon-public-score-linux-x64/observathon-score \
+  --run run_output.json --findings solution/findings.json \
+  --team deepseek-observathon --out score.json
+```
 
-## Các giai đoạn
-- **Bây giờ → 1h**: chẩn đoán bằng binary practice; viết lại prompt + config.
-- **1h** public **sim** · **2h** public **score** → commit, push, leo bảng.
-- **3h** private **sim** (bộ giữ kín + diễn đạt lại + đòn **injection**) · **3.5h** private **score** → push (lần cuối).
+**Private Phase**
+```bash
+rm -f run_output.json score.json wrapper_debug.log observathon_telemetry.jsonl
+./bin/private/observathon-sim \
+  --testset private --config solution/config.json \
+  --wrapper solution/wrapper.py --out run_output.json --concurrency 8
 
-Xem `docs/FAULT_CLASSES.md`, `docs/PROMPT_OPTIMIZATION.md`, `docs/WRAPPER_API.md`, `docs/SUBMIT.md`. Luật: `../RULES.md`.
+./observathon-private-score-linux-x64/observathon-score \
+  --run run_output.json --findings solution/findings.json \
+  --team deepseek-observathon --out score.json
+```
+
+> ⚠️ Không dùng lẫn `run_output.json` giữa Public và Private — scorer sẽ báo lỗi `0 q, 0 correct`.
+
+## Kiểm tra trước khi nộp
+```bash
+python3 harness/selfcheck.py
+```
+Phải thấy `[PASS]` toàn bộ 5 mục.
+
+## Nguyên tắc bắt buộc
+- **Không hardcode** QID, câu hỏi, câu trả lời, hay bảng giá.
+- **Không sửa** binary `bin/`, scorer, hoặc `run_output.json`/`score.json` bằng tay.
+- **Không commit** API key thật lên git.
+
+## Kết quả (Minh chứng)
+![Public Score](image/public.png)
+![Private Score](image/private.png)

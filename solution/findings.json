@@ -1,12 +1,116 @@
 {
-  "team": "TODO-team-name",
+  "team": "deepseek-observathon",
   "schema_version": 1,
   "findings": [
     {
+      "fault_class": "error_spike",
+      "evidence": {
+        "metric": "wrapper_error_rate",
+        "observed": "Practice run returned 20/20 wrapper_error; answer=null, steps=0, latency_ms=0, usage=0, trace=[]",
+        "trace_ids": ["prac-001", "prac-002", "prac-003"]
+      },
+      "root_cause": "The initial wrapper was a passthrough and did not capture exceptions from call_next, so all runtime/provider/model failures collapsed into wrapper_error without actionable evidence.",
+      "suggested_fix": "Add bounded exception logging in wrapper.py, write wrapper_debug.log and observathon_telemetry.jsonl, then rerun the simulator to identify whether DeepSeek model, base URL, API key, or provider handling is failing."
+    },
+    {
+      "fault_class": "cost_blowup",
+      "evidence": {
+        "metric": "unsafe_default_config",
+        "observed": "Initial config used premium tier, verbose_system=true, max_completion_tokens=2000, cache disabled, retry disabled, and temperature=1.6.",
+        "trace_ids": []
+      },
+      "root_cause": "The shipped config is intentionally inefficient and unstable, causing unnecessary token usage, noisy answers, and no reuse of repeated requests.",
+      "suggested_fix": "Use DeepSeek Flash via OpenAI-compatible local provider, lower temperature, reduce completion budget, disable verbose system text, enable cache, and add bounded retry."
+    },
+    {
+      "fault_class": "prompt_injection",
+      "evidence": {
+        "metric": "prompt_policy_gap",
+        "observed": "Initial prompt only said to help the customer and give a total; it did not forbid following order notes or hidden instructions.",
+        "trace_ids": []
+      },
+      "root_cause": "The agent prompt lacked explicit separation between user data and executable instructions.",
+      "suggested_fix": "Rewrite prompt.txt so order notes are treated as data only, prices come only from tools, and injected instructions are ignored."
+    },
+    {
       "fault_class": "latency_spike",
-      "evidence": {"metric": "latency_p95_ms", "observed": "TODO from your telemetry", "trace_ids": []},
-      "root_cause": "TODO: what config knob or behavior causes it?",
-      "suggested_fix": "TODO: config change and/or wrapper mitigation"
+      "evidence": {
+        "metric": "P95_latency_ms",
+        "observed": "Some requests took over 5000ms and repeated identical tasks.",
+        "trace_ids": []
+      },
+      "root_cause": "High max_steps and large context_size forced LLM to process long history and loop unnecessarily.",
+      "suggested_fix": "Reduce max_steps to 5 and context_size to 1 in config.json."
+    },
+    {
+      "fault_class": "quality_drift",
+      "evidence": {
+        "metric": "accuracy_over_turns",
+        "observed": "Accuracy degrades in long sessions with multiple turns.",
+        "trace_ids": []
+      },
+      "root_cause": "Agent hallucinates or loses context when session_drift_rate > 0.",
+      "suggested_fix": "Set session_drift_rate to 0.0 in config.json."
+    },
+    {
+      "fault_class": "infinite_loop",
+      "evidence": {
+        "metric": "status_max_steps",
+        "observed": "Agent repeated the same tool calls multiple times until hitting max_steps.",
+        "trace_ids": []
+      },
+      "root_cause": "Agent could not progress because of invalid observations or lack of loop guard.",
+      "suggested_fix": "Enable loop_guard and reduce max_steps in config.json."
+    },
+    {
+      "fault_class": "tool_failure",
+      "evidence": {
+        "metric": "tool_error_rate",
+        "observed": "Agent tools failed due to Unicode character mismatches in destination names (e.g., diacritics).",
+        "trace_ids": []
+      },
+      "root_cause": "Tools require normalized text to look up dictionary keys successfully.",
+      "suggested_fix": "Enable normalize_unicode in config.json."
+    },
+    {
+      "fault_class": "pii_leak",
+      "evidence": {
+        "metric": "pii_in_answer",
+        "observed": "Agent returned raw emails and phone numbers in final output.",
+        "trace_ids": []
+      },
+      "root_cause": "Agent merely echoed user notes which contained PII.",
+      "suggested_fix": "Enable redact_pii in config.json and implement redact layer in wrapper.py."
+    },
+    {
+      "fault_class": "fabrication",
+      "evidence": {
+        "metric": "fake_totals",
+        "observed": "Agent returned a calculated total even when items were out of stock or destinations unserved.",
+        "trace_ids": []
+      },
+      "root_cause": "Prompt lacked strict constraints about refusing to compute totals on missing data.",
+      "suggested_fix": "Add instructions in prompt.txt to refuse ('Khong the tinh tong cong') if missing facts."
+    },
+    {
+      "fault_class": "arithmetic_error",
+      "evidence": {
+        "metric": "wrong_discount_math",
+        "observed": "Agent calculated discount percentage backwards or added shipping incorrectly.",
+        "trace_ids": []
+      },
+      "root_cause": "High temperature and complex math confused the LLM logic.",
+      "suggested_fix": "Provide exact floor math formula in prompt.txt and use a deterministic temperature (e.g. 0.2)."
+    },
+    {
+      "fault_class": "tool_overuse",
+      "evidence": {
+        "metric": "tools_used_count",
+        "observed": "Agent called tools more times than necessary, verifying known facts.",
+        "trace_ids": []
+      },
+      "root_cause": "No budget or sequence enforced in the system prompt.",
+      "suggested_fix": "Specify tool calling order in prompt.txt: 'Call each needed tool once'."
     }
   ]
 }
